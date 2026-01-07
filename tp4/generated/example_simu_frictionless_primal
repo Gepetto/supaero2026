@@ -1,0 +1,23 @@
+# Solve the primal QP (search the velocity)
+            # min_v  .5 vMv - vfMv st Jv>=0
+            qp1 = QP(model.nv, 0, nc, False)
+            qp1.init(H=data.M, g=-data.M @ vf, A=None, b=None, C=J, l=np.zeros(nc))
+            qp1.settings.eps_abs = 1e-12
+            qp1.solve()
+
+            vnext = qp1.results.x
+            # By convention, proxQP takes negative multipliers for the lower bounds
+            # We prefer to see the positive forces (ie applied by body 1 to body 2).
+            forces = -qp1.results.z
+
+            # Check the solution respects the physics
+            assert np.all(forces >= -1e-6)
+            assert np.all(J @ vnext >= -1e-6)
+            assert np.allclose(forces * (J @ vnext), 0)
+            # Check the acceleration obtained from the forces
+            assert np.allclose(
+                pin.aba(model, data, q, v, tau + J.T @ forces / DT),
+                (vnext - v) / DT,
+                rtol=1e-3,
+                atol=1e-6,
+            )

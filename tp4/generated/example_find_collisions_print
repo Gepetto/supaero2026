@@ -1,0 +1,5 @@
+for pairId, c in enumerate(geom_data.collisionResults):
+    if len(c.getContacts()) > 0:
+        contact = c.getContact(0)
+        print([n for n in dir(contact) if "__" not in n])
+        break

@@ -1,0 +1,5 @@
+x, y, z = qp.results.x, qp.results.y, qp.results.z
+if WITH_BOUNDS:
+    w = z[NINEQ:]  # bounds
+    z = z[:NINEQ]  # general inequalities
+cost = qp.results.info.objValue

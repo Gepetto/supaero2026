@@ -1,0 +1,8 @@
+# Obtained by simply copying the collision model
+visual_model = geom_model.copy()
+preallocateVisualObjects(visual_model)
+
+# Start meshcat
+viz = MeshcatVisualizer(
+    model=model, collision_model=geom_model, visual_model=visual_model
+)

@@ -1,0 +1,4 @@
+print("Primal optimum x: {}".format(x))
+    print("Dual optimum (equalities) y: {}".format(y))
+    print("Dual optimum (ineq) z: {}".format(z))
+    print("Dual optimum (bounds) w: {}".format(w))

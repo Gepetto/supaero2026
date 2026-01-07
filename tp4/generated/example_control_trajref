@@ -1,0 +1,7 @@
+from tp4.traj_ref import TrajRef  # noqa E402
+
+qdes = TrajRef(
+    q0,
+    omega=np.array([0, 0.1, 1, 1.5, 2.5, -1, -1.5, -2.5, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6]),
+    amplitude=1.5,
+)

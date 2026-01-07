@@ -1,0 +1,2 @@
+M = pin.crba(model, data, q)
+b = pin.nle(model, data, q, vq)

@@ -1,0 +1,34 @@
+# ### MAIN LOOP
+# ### MAIN LOOP
+# ### MAIN LOOP
+for t in range(T):
+    # Compute free dynamics
+    tau = np.zeros(model.nv)
+    pin.computeCollisions(model, data, geom_model, geom_data, q)
+    vf = v + DT * pin.aba(model, data, q, v, tau)
+
+    # Create contact models from collision
+    contact_models = createContactModelsFromCollisions(
+        model, data, geom_model, geom_data
+    )
+    contact_datas = [cm.createData() for cm in contact_models]
+
+    nc = len(contact_models)
+    if nc == 0:
+        # No collision, just integrate the free dynamics
+        v = vf
+    else:
+        # With at least one collision ...
+        # Compute mass matrix.
+        # (pin.crba should be enough in P3X, but CAT to be sure in P2X);
+        pin.computeAllTerms(model, data, q, v)
+        # The contact solver express the constraint in term of velocity of
+        # body 1 wrt to body 2. It is more intuitive to think to the opposite
+        # so take the negative jacobian (ie velocity of body 2 wrt body 1, whose
+        # normal component should be positive).
+        # Select only normal components of contact
+        # (frictionless slide on the tangent components, uncontrained)
+        J = -pin.getConstraintsJacobian(model, data, contact_models, contact_datas)[
+            2::3, :
+        ]
+        assert J.shape == (nc, model.nv)

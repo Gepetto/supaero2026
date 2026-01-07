@@ -1,0 +1,11 @@
+# You can similarly display the witnesses based on distance computation.
+    # But if you want to have witnesses when object as far to each other, you
+    # need to give some margin.
+
+    # Force the collision margin to a huge value.
+    for r in geom_data.collisionRequests:
+        r.security_margin = 10
+
+    # Display the witnesses.
+    pin.computeCollisions(model, data, geom_model, geom_data, q, False)
+    mcWitnesses.displayCollisions(geom_data)

@@ -1,0 +1,2 @@
+q = q0.copy()
+vq = np.zeros(model.nv)

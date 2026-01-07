@@ -1,0 +1,30 @@
+# Cost
+H = np.random.rand(NX, NX) * 2 - 1
+H = H @ H.T  ### Make it positive symmetric
+g = np.random.rand(NX)
+
+Ae = np.random.rand(NEQ, NX) * 2 - 1
+be = np.random.rand(NEQ) * 2 - 1
+
+Ai = np.random.rand(NINEQ, NX) * 2 - 1
+bi = np.sort(np.random.rand(NINEQ, 2) * 2 - 1, 1)
+for i in range(NINEQ):
+    # Half inequalities are double bounds
+    # One quarter are pure lower
+    # One quarter are pure upper
+    r = random.randint(0, 3)
+    if r == 0:
+        bi[i, 0] = -1e20
+    elif r == 1:
+        bi[i, 1] = 1e20
+
+bounds = np.sort(np.random.rand(NX, 2) * 2 - 1, 1) + [-1, 1]
+for i in range(NX):
+    # Half inequalities are double bounds
+    # One quarter are pure lower
+    # One quarter are pure upper
+    r = random.randint(0, 3)
+    if r == 0:
+        bounds[i, 0] = -1e20
+    elif r == 1:
+        bounds[i, 1] = 1e20

@@ -1,0 +1,11 @@
+pin.computeCollisions(model, data, geom_model, geom_data, q, False)
+    contact_models = createContactModelsFromCollisions(
+        model, data, geom_model, geom_data
+    )
+    contact_datas = [cm.createData() for cm in contact_models]
+
+    pin.computeDistances(model, data, geom_model, geom_data, q)
+    contact_models = createContactModelsFromDistances(
+        model, data, geom_model, geom_data, threshold=10
+    )  # threshold in meter
+    contact_datas = [cm.createData() for cm in contact_models]

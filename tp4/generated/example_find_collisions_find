@@ -1,0 +1,7 @@
+for trial in range(1000):
+    q = pin.randomConfiguration(model)
+    col = pin.computeCollisions(model, data, geom_model, geom_data, q)
+    if col:
+        break
+assert col
+viz.display(q)

@@ -1,0 +1,15 @@
+# [x, cost, _, niter, lag, iact] =
+qp = proxsuite.proxqp.dense.QP(NX, NEQ, NINEQ, WITH_BOUNDS)
+qp.settings.eps_abs = ACCURACY / 1e3
+qp.init(
+    H,
+    g,
+    Ae,
+    be,
+    Ai,
+    bi[:, 0],
+    bi[:, 1],
+    bounds[:, 0] if WITH_BOUNDS else None,
+    bounds[:, 1] if WITH_BOUNDS else None,
+)
+qp.solve()

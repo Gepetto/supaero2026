@@ -1,0 +1,14 @@
+v = (np.random.rand(model.nv) * 2 - 1) * 1e-3
+r0 = [np.linalg.norm(q[7 * i : 7 * i + 3]) for i in range(model.nq // 7)]
+for t in range(100):
+    # Update the robot position along an arbitrary trajectory
+    q = pin.integrate(model, q, v * 10)
+    for i in range(model.nq // 7):
+        q[7 * i : 7 * i + 3] *= r0[i] / np.linalg.norm(q[7 * i : 7 * i + 3])
+    viz.display(q)
+
+    # Display the witness points
+    pin.computeDistances(model, data, geom_model, geom_data, q)
+    mcWitnesses.displayDistances(geom_data)
+
+    time.sleep(0.01)

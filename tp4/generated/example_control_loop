@@ -1,0 +1,27 @@
+hq = []  ### For storing the logs of measured trajectory q
+hqdes = []  ### For storing the logs of desired trajectory qdes
+for i in range(T):
+    t = i * DT
+
+    # Compute the model.
+    M = pin.crba(model, data, q)
+    b = pin.nle(model, data, q, vq)
+
+    # Compute the PD control.
+    tauq = -Kp * (q - qdes(t)) - Kv * (vq - qdes.velocity(t)) + qdes.acceleration(t)
+
+    # Simulated the resulting acceleration (forward dynamics
+    aq = np.linalg.inv(M) @ (tauq - b)
+
+    # Integrate the acceleration.
+    vq += aq * DT
+    q = pin.integrate(model, q, vq * DT)
+
+    # Display once in a while...
+    if DT_VISU is not None and abs((t) % DT_VISU) <= 0.9 * DT:
+        viz.display(q)
+        time.sleep(DT_VISU)
+
+    # Log the history.
+    hq.append(q.copy())
+    hqdes.append(qdes.copy())

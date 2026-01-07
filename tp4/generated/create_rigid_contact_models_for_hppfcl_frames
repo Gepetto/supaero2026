@@ -1,0 +1,18 @@
+pair = geom_model.collisionPairs[pairId]
+    gid1, gid2 = pair.first, pair.second
+    g1 = geom_model.geometryObjects[gid1]
+    g2 = geom_model.geometryObjects[gid2]
+    jid1 = g1.parentJoint
+    jid2 = g2.parentJoint
+    oMj1 = data.oMi[jid1]
+    oMj2 = data.oMi[jid2]
+
+    # Compute translation and rotation of the contact placements
+    # If dist=0, both placements are identical (and should be somehow close
+    # when dist is reasonibly small).
+    quat = pin.Quaternion.FromTwoVectors(
+        pin.ZAxis, normal
+    )  # orientation of the contact frame wrt world
+    assert np.isclose(quat.norm(), 1)
+    oMc1 = pin.SE3(quat.matrix(), OC1)  # Placement of first contact frame in world
+    oMc2 = pin.SE3(quat.matrix(), OC2)  # Placement of second contact frame in world

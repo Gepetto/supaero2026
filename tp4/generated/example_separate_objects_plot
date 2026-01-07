@@ -1,0 +1,4 @@
+# Plot the distances
+for k, v in h_dist.items():
+    h = plt.plot(v, label=k)
+plt.legend()

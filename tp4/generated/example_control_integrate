@@ -1,0 +1,2 @@
+vq += aq * DT
+q = pin.integrate(model, q, vq * DT)

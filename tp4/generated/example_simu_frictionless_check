@@ -1,0 +1,6 @@
+# Check QP2 primal vs QP1 dual
+            assert np.allclose(qp2.results.x, -qp1.results.z, rtol=1e-3, atol=1e-4)
+            # Check QP2 constraint vs QP1 constraint
+            assert np.allclose(
+                delasus @ qp2.results.x + J @ vf, J @ qp1.results.x, rtol=1, atol=1e-5
+            )

@@ -1,0 +1,8 @@
+model, geom_model = buildSceneRobotHand()
+data = model.createData()
+visual_model = geom_model.copy()
+viz = MeshcatVisualizer(
+    model=model, collision_model=geom_model, visual_model=visual_model
+)
+q0 = model.referenceConfigurations["default"]
+viz.display(q0)

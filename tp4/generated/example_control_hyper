@@ -1,0 +1,5 @@
+# Hyperparameters for the simu
+DT = 1e-3  # simulation timestep
+DT_VISU = 1 / 50
+DURATION = 3.0  # duration of simulation
+T = int(DURATION / DT)  # number of time steps

@@ -1,0 +1,31 @@
+# ### DUAL FORMULATION
+            # Solve the dual QP (search the forces)
+            # min_f .5 f D f st f>=0, D f + J vf >= 0
+            Minv = pin.computeMinverse(model, data)
+            delasus = J @ Minv @ J.T
+
+            qp2 = QP(nc, 0, 0, box_constraints=True)
+            qp2.settings.eps_abs = 1e-12
+            # Both side of the box constraint must be given
+            # otherwise the behavior of the solver is strange
+            qp2.init(
+                H=delasus,
+                g=J @ vf,
+                C=None,
+                l=None,
+                l_box=np.zeros(nc),
+                u_box=np.ones(nc) * np.inf,
+            )
+            qp2.solve()
+
+            # Compute the contact acceleration from the forces
+            forces = qp2.results.x
+            vnext = v + DT * pin.aba(model, data, q, v, tau + J.T @ forces / DT)
+
+            # Check the solution respects the physics
+            assert np.all(forces >= -1e-6)
+            assert np.all(J @ vnext >= -1e-6)
+            assert np.allclose(forces * (J @ vnext), 0)
+            assert np.allclose(qp2.results.z, -J @ vnext)
+            vnext_alt = vf + Minv @ J.T @ forces
+            assert np.allclose(vnext, vnext_alt)

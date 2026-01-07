@@ -1,0 +1,2 @@
+updateVisualObjects(model, data, contact_models, contact_datas, visual_model, viz)
+viz.display(q)

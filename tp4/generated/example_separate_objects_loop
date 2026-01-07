@@ -1,0 +1,78 @@
+# Set minimal distance to be EPSILON
+# (can be zero, but the rendering is less clear).
+for r in geom_data.collisionRequests:
+    r.security_margin = EPSILON
+
+# Keep distance history for active pairs (indexed by contact name)
+h_dist = {}
+
+# Iteratively push the colliding pairs ...
+for i in range(NB_ITER):
+    # We will compute a change of configuration dq.
+    # 0 if no active pair.
+    dq = np.zeros(model.nv)
+
+    # Compute the collision at current configuration.
+    if USE_DISTANCE:
+        pin.computeDistances(model, data, geom_model, geom_data, q)
+    else:
+        pin.computeCollisions(model, data, geom_model, geom_data, q)
+
+    # From hppfcl contact information, build a pin.RigidContactModel
+    if USE_DISTANCE:
+        contact_models = createContactModelsFromDistances(
+            model, data, geom_model, geom_data, EPSILON
+        )
+    else:
+        contact_models = createContactModelsFromCollisions(
+            model, data, geom_model, geom_data
+        )
+    contact_datas = [cm.createData() for cm in contact_models]
+
+    # For each detected contact ...
+    for cmodel, cdata in zip(contact_models, contact_datas):
+        # Recover contact information
+        jid1 = cmodel.joint1_id
+        j1Mc1 = cmodel.joint1_placement
+        jid2 = cmodel.joint2_id
+        j2Mc2 = cmodel.joint2_placement
+
+        # Compute signed distance
+        oMc1 = cdata.oMc1 = data.oMi[jid1] * j1Mc1
+        oMc2 = cdata.oMc2 = data.oMi[jid2] * j2Mc2
+        dist = oMc1.actInv(oMc2.translation)[2] - EPSILON  # signed distance
+
+        # Decide push velocity at contact point, in contact frames
+        # We apply the same velocity proportional to the inverse of the signed
+        # distance (exponential repel until EPSILON distance is reached)
+        c_v = PUSH_FACTOR * pin.Motion(np.array([0, 0, dist]), np.zeros(3))
+
+        # The velocities in joint space are expressed as spatial velocity
+        # at the center of the respective joints. Displace c_v from F_c to F_j1/F_j2
+        # Displacement for body 1
+        j1_v = j1Mc1.act(c_v)
+        dq[model.idx_vs[jid1] : model.idx_vs[jid1] + 6] += j1_v.vector
+        # Displacement for body 2
+        j2_v = j2Mc2.act(c_v)
+        dq[model.idx_vs[jid2] : model.idx_vs[jid2] + 6] -= j2_v.vector
+
+        # Log the distance in h_dist for future plot
+        if cmodel.name not in h_dist:
+            h_dist[cmodel.name] = np.zeros(NB_ITER)
+        h_dist[cmodel.name][i] = dist
+
+    # Finally, modify the current config q with the push dq
+    q = pin.integrate(model, q, dq)
+
+    print(
+        f"Iteration #{i}/{NB_ITER}: {len(contact_models)} active collision "
+        + f"pairs (given margin {EPSILON})"
+    )
+
+    # Display the current configuration
+    if i % 10 == 0:
+        # Meshcat is slow to display the patches, display once in a while
+        updateVisualObjects(
+            model, data, contact_models, contact_datas, visual_model, viz
+        )
+        viz.display(q)

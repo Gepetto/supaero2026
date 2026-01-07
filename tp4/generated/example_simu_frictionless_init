@@ -1,0 +1,25 @@
+# ### SCENE
+# Create scene with multiple objects
+model, geom_model = buildSceneCubes(3)
+
+# Create the corresponding data to the models
+data = model.createData()
+geom_data = geom_model.createData()
+
+for req in geom_data.collisionRequests:
+    req.security_margin = 1e-3
+    req.num_max_contacts = 20
+    req.enable_contact = True
+
+# ### VIZUALIZATION
+visual_model = geom_model.copy()
+preallocateVisualObjects(visual_model, 16)
+viz = MeshcatVisualizer(
+    model=model, collision_model=geom_model, visual_model=visual_model
+)
+updateVisualObjects(model, data, [], [], visual_model, viz)
+
+# ### INIT MODEL STATE
+q0 = model.referenceConfigurations["default"]
+
+viz.display(q0)

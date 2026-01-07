@@ -1,0 +1,9 @@
+contact_model = pin.RigidConstraintModel(
+        pin.ContactType.CONTACT_3D,
+        model,
+        jid1,
+        oMj1.inverse() * oMc1,
+        jid2,
+        oMj2.inverse() * oMc2,
+        pin.LOCAL,
+    )
