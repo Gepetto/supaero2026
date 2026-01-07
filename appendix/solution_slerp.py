@@ -4,7 +4,7 @@ from time import sleep
 import numpy as np
 from numpy.linalg import norm
 from pinocchio import SE3, AngleAxis, Quaternion
-from supaero2024.meshcat_viewer_wrapper import MeshcatVisualizer
+from supaero2025.meshcat_viewer_wrapper import MeshcatVisualizer
 
 viz = MeshcatVisualizer()
 

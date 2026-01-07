@@ -1,12 +1,24 @@
-# Supaero robotics, 2025
+# Supaero robotics, 2026
 
-This repository contains the exercices for the robotics class at Supaero, 2025.
+This repository contains the exercices for the robotics class at Supaero, 2026.
 The exercices are organized by notebook. Each notebook corresponds to one chapter of the class.
 The notebooks are in Python and based on the software [Pinocchio](https://github.com/stack-of-tasks/pinocchio).
 
 ## Set up
 
-### Default setup
+## Default setup (recommended)
+
+This project uses [uv](https://docs.astral.sh/uv/), a fast, modern Python package manager that works on
+Linux, macOS, and Windows.
+
+If you have `uv` installed, setting up the project requires just one command:
+
+```bash
+uv run jupyter lab
+```
+
+
+### Alternative setup using Pip (PyPI)
 
 This setup should work on Linux / MacOS / WSL2.
 
@@ -31,16 +43,7 @@ pip install .
 
 After that, you can start the server with `jupyter lab`
 
-### uv
-
-Instead of using pip and venv, you can use this project directly with [uv](https://docs.astral.sh/uv/), which will
-setup everything for you, and you'll only need one command:
-
-```bash
-uv run jupyter lab
-```
-
-### Docker
+### Fallback solution: docker 
 
 If the default setup is not working for you, as a backup solution, a Docker image is provided, and can be started with:
 

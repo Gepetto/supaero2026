@@ -1,336 +1,192 @@
-"""
-Deep actor-critic network,
-From "Continuous control with deep reinforcement learning", by Lillicrap et al,
-arXiv:1509.02971
-"""
-
+# docs and experiment results can be found at https://docs.cleanrl.dev/rl-algorithms/ddpg/#ddpg_continuous_actionpy
 import random
-import signal
-from collections import deque
 
-import matplotlib.pyplot as plt
+import gymnasium as gym
 import numpy as np
-import tensorflow as tf
-import tensorflow.keras as tfk
-from env_pendulum import EnvPendulumSinCos
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from stable_baselines3.common.buffers import ReplayBuffer
+
+# HYPERPARAM
+SEED = 1
+ENV_ID = "Pendulum-v1"
+NUM_ENVS = 1
+LEARNING_RATE = 3e-4
+BUFFER_SIZE = int(1e6)
+TOTAL_TIMESTEPS = 1000000
+TRAIN_FREQUENCY = 2
+BATCH_SIZE = 256
+GAMMA = 0.99
+TARGET_NETWORK_FREQUENCY = 2
+TAU = 0.005
+EXPLORATION_NOISE = 0.1
 
 
-def Env():
-    return EnvPendulumSinCos(1, viewer="meshcat")
+def make_env(env_id, seed, idx, capture_video, run_name):
+    def thunk():
+        if capture_video and idx == 0:
+            env = gym.make(env_id, render_mode="rgb_array")
+            env = gym.wrappers.RecordVideo(env, f"videos/{run_name}")
+        else:
+            env = gym.make(env_id)
+        env = gym.wrappers.RecordEpisodeStatistics(env)
+        env.action_space.seed(seed)
+        return env
+
+    return thunk
 
 
-#######################################################################################################33
-#######################################################################################################33
-#######################################################################################################33
-### --- Random seed
-RANDOM_SEED = 0  # int((time.time()%10)*1000)
-print("Seed = %d" % RANDOM_SEED)
-np.random.seed(RANDOM_SEED)
-random.seed(RANDOM_SEED)
-tf.random.set_seed(RANDOM_SEED)
-
-### --- Hyper paramaters
-NEPISODES = 1000  # Max training steps
-NSTEPS = 200  # Max episode length
-QVALUE_LEARNING_RATE = 0.001  # Base learning rate for the Q-value Network
-POLICY_LEARNING_RATE = 0.0001  # Base learning rate for the policy network
-DECAY_RATE = 0.99  # Discount factor
-UPDATE_RATE = 0.01  # Homotopy rate to update the networks
-REPLAY_SIZE = 10000  # Size of replay buffer
-BATCH_SIZE = 64  # Number of points to be fed in stochastic gradient
-NH1 = NH2 = 250  # Hidden layer size
-EXPLORATION_NOISE = 0.2
-
-### --- Environment
-# problem = "Pendulum-v1"
-# env = gym.make(problem)
-# NX = env.observation_space.shape[0]
-# NU = env.action_space.shape[0]
-# UMAX = env.action_space.high[0]
-# env.reset(seed=RANDOM_SEED)
-# assert( env.action_space.low[0]==-UMAX)
-
-env = Env()  # Continuous pendulum
-NX = env.nx  # ... training converges with q,qdot with 2x more neurones.
-NU = env.nu  # Control is dim-1: joint torque
-UMAX = env.umax[0]  # Torque range
-
-
-######################################################################################33
-### NETWORKS #########################################################################33
-######################################################################################33
-
-
-class QValueNetwork:
-    """
-    Neural representaion of the Quality function:
-    Q:  x,y -> Q(x,u) \in R
-    """
-
-    def __init__(self, nx, nu, nhiden1=32, nhiden2=256, learning_rate=None):
-        state_input = tfk.layers.Input(shape=(nx))
-        state_out = tfk.layers.Dense(nhiden1, activation="relu")(state_input)
-        state_out = tfk.layers.Dense(nhiden1, activation="relu")(state_out)
-
-        action_input = tfk.layers.Input(shape=(nu))
-        action_out = tfk.layers.Dense(nhiden1, activation="relu")(action_input)
-
-        concat = tfk.layers.Concatenate()([state_out, action_out])
-
-        out = tfk.layers.Dense(nhiden2, activation="relu")(concat)
-        out = tfk.layers.Dense(nhiden2, activation="relu")(out)
-        value_output = tfk.layers.Dense(1)(out)
-
-        self.model = tfk.Model([state_input, action_input], value_output)
-
-    @tf.function
-    def targetAssign(self, target, tau=UPDATE_RATE):
-        for tar, cur in zip(target.model.variables, self.model.variables):
-            tar.assign(cur * tau + tar * (1 - tau))
-
-
-class PolicyNetwork:
-    """
-    Neural representation of the policy function:
-    Pi: x -> u=Pi(x) \in R^nu
-    """
-
-    def __init__(self, nx, nu, umax, nhiden=32, learning_rate=None):
-        random_init = tf.random_uniform_initializer(minval=-0.005, maxval=0.005)
-
-        state_input = tfk.layers.Input(shape=(nx,))
-        out = tfk.layers.Dense(nhiden, activation="relu")(state_input)
-        out = tfk.layers.Dense(nhiden, activation="relu")(out)
-        policy_output = (
-            tfk.layers.Dense(1, activation="tanh", kernel_initializer=random_init)(out)
-            * umax
+# ALGO LOGIC: initialize agent here:
+class QNetwork(nn.Module):
+    def __init__(self, env):
+        super().__init__()
+        self.fc1 = nn.Linear(
+            np.array(env.single_observation_space.shape).prod()
+            + np.prod(env.single_action_space.shape),
+            256,
         )
-        self.model = tfk.Model(state_input, policy_output)
+        self.fc2 = nn.Linear(256, 256)
+        self.fc3 = nn.Linear(256, 1)
 
-    @tf.function
-    def targetAssign(self, target, tau=UPDATE_RATE):
-        for tar, cur in zip(target.model.variables, self.model.variables):
-            tar.assign(cur * tau + tar * (1 - tau))
-
-    def numpyPolicy(self, x, noise=None):
-        """Eval the policy with numpy input-output (nx,)->(nu,)."""
-        x_tf = tf.expand_dims(tf.convert_to_tensor(x), 0)
-        u = np.squeeze(self.model(x_tf).numpy(), 0)
-        if noise is not None:
-            u = np.clip(u + noise, -UMAX, UMAX)
-        return u
-
-    def __call__(self, x, **kwargs):
-        return self.numpyPolicy(x, **kwargs)
+    def forward(self, x, u):
+        x = torch.cat([x, u], 1)
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
+        x = self.fc3(x)
+        return x
 
 
-################################################################################################
-
-
-class OUNoise:
-    """
-    Ornstein–Uhlenbeck processes are markov random walks with the nice
-    property to eventually converge to its mean.
-    We use it for adding some random search at the begining of the exploration.
-    """
-
-    def __init__(
-        self, mean, std_deviation, theta=0.15, dt=1e-2, y_initial=None, dtype=np.float32
-    ):
-        self.theta = theta
-        self.mean = mean.astype(dtype)
-        self.std_dev = std_deviation.astype(dtype)
-        self.dt = dt
-        self.dtype = dtype
-        self.reset(y_initial)
-
-    def __call__(self):
-        # Formula taken from https://www.wikipedia.org/wiki/Ornstein-Uhlenbeck_process.
-        noise = np.random.normal(size=self.mean.shape).astype(self.dtype)
-        self.y += (
-            self.theta * (self.mean - self.y) * self.dt
-            + self.std_dev * np.sqrt(self.dt) * noise
+class Actor(nn.Module):
+    def __init__(self, env):
+        super().__init__()
+        self.fc1 = nn.Linear(np.array(env.single_observation_space.shape).prod(), 256)
+        self.fc2 = nn.Linear(256, 256)
+        self.fc_mu = nn.Linear(256, np.prod(env.single_action_space.shape))
+        # action rescaling
+        self.register_buffer(
+            "action_scale",
+            torch.tensor(
+                (env.action_space.high - env.action_space.low) / 2.0,
+                dtype=torch.float32,
+            ),
         )
-        return self.y.copy()
-
-    def reset(self, y_initial=None):
-        self.y = (
-            y_initial.astype(self.dtype)
-            if y_initial is not None
-            else np.zeros_like(self.mean)
+        self.register_buffer(
+            "action_bias",
+            torch.tensor(
+                (env.action_space.high + env.action_space.low) / 2.0,
+                dtype=torch.float32,
+            ),
         )
 
-
-### --- Replay memory
-class ReplayItem:
-    """
-    Storage for the minibatch
-    """
-
-    def __init__(self, x, u, r, d, x2):
-        self.x = x
-        self.u = u
-        self.reward = r
-        self.done = d
-        self.x2 = x2
+    def forward(self, x):
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
+        x = torch.tanh(self.fc_mu(x))
+        return x * self.action_scale + self.action_bias
 
 
-#######################################################################################################33
-quality = QValueNetwork(NX, NU, NH1, NH2)
-qualityTarget = QValueNetwork(NX, NU, NH1, NH2)
-quality.targetAssign(qualityTarget, 1)
+# TRY NOT TO MODIFY: seeding
+random.seed(SEED)
+np.random.seed(SEED)
+torch.manual_seed(SEED)
 
-policy = PolicyNetwork(NX, NU, umax=UMAX, nhiden=NH2)
-policyTarget = PolicyNetwork(NX, NU, umax=UMAX, nhiden=NH2)
-policy.targetAssign(policyTarget, 1)
+# env setup
+envs = gym.vector.SyncVectorEnv([make_env(ENV_ID, SEED, 0, False, "TP6")])
+assert isinstance(
+    envs.single_action_space, gym.spaces.Box
+), "only continuous action space is supported"
 
-replayDeque = deque()
+actor = Actor(envs)
+qf1 = QNetwork(envs)
+qf1_target = QNetwork(envs)
+target_actor = Actor(envs)
+target_actor.load_state_dict(actor.state_dict())
+qf1_target.load_state_dict(qf1.state_dict())
+q_optimizer = torch.optim.Adam(list(qf1.parameters()), lr=LEARNING_RATE)
+actor_optimizer = torch.optim.Adam(list(actor.parameters()), lr=LEARNING_RATE)
 
-ou_noise = OUNoise(
-    mean=np.zeros(1), std_deviation=float(EXPLORATION_NOISE) * np.ones(1)
+envs.single_observation_space.dtype = np.float32
+rb = ReplayBuffer(
+    BUFFER_SIZE,
+    envs.single_observation_space,
+    envs.single_action_space,
+    "cpu",
+    handle_timeout_termination=False,
 )
-ou_noise.reset(np.array([UMAX / 2]))
 
-#######################################################################################################33
-### MAIN ACTOR-CRITIC BLOCK
-#######################################################################################################33
+# start the game
+obs, _ = envs.reset(seed=SEED)
+h_rwd = []
 
-critic_optimizer = tfk.optimizers.Adam(QVALUE_LEARNING_RATE)
-actor_optimizer = tfk.optimizers.Adam(POLICY_LEARNING_RATE)
-
-
-@tf.function
-def learn(state_batch, action_batch, reward_batch, next_state_batch):
-    """
-    <learn> is isolated in a tf.function to make it more efficient.
-    @tf.function forces tensorflow to optimize the inner computation graph
-    defined in this function.
-    """
-
-    # Automatic differentiation of the critic loss, using tf.GradientTape
-    # The critic loss is the classical Q-learning loss:
-    #         loss = || Q(x,u) -  (reward + Q(xnext,Pi(xnexT)) ) ||**2
-    with tf.GradientTape() as tape:
-        target_actions = policyTarget.model(next_state_batch, training=True)
-        y = reward_batch + DECAY_RATE * qualityTarget.model(
-            [next_state_batch, target_actions], training=True
+for global_step in range(TOTAL_TIMESTEPS):
+    # ALGO LOGIC: put action logic here
+    if global_step < TOTAL_TIMESTEPS // 40:
+        actions = np.array(
+            [envs.single_action_space.sample() for _ in range(envs.num_envs)]
         )
-        critic_value = quality.model([state_batch, action_batch], training=True)
-        critic_loss = tf.math.reduce_mean(tf.math.square(y - critic_value))
+    else:
+        with torch.no_grad():
+            actions = actor(torch.Tensor(obs))
+            actions += torch.normal(0, actor.action_scale * EXPLORATION_NOISE)
+            actions = actions.numpy().clip(
+                envs.single_action_space.low, envs.single_action_space.high
+            )
 
-    critic_grad = tape.gradient(critic_loss, quality.model.trainable_variables)
-    critic_optimizer.apply_gradients(
-        zip(critic_grad, quality.model.trainable_variables)
-    )
+    # execute the game
+    next_obs, rewards, terminations, truncations, infos = envs.step(actions)
 
-    # Automatic differentiation of the actor loss, using tf.GradientTape
-    # The actor loss implements a greedy optimization on the quality function
-    #           loss(u) = Q(x,u)
-    with tf.GradientTape() as tape:
-        actions = policy.model(state_batch, training=True)
-        critic_value = quality.model([state_batch, actions], training=True)
-        actor_loss = -tf.math.reduce_mean(critic_value)
+    # record rewards for plotting purposes
+    if "final_info" in infos:
+        for info in infos["final_info"]:
+            print(f"global_step={global_step}, episodic_return={info['episode']['r']}")
+            h_rwd.append(info["episode"]["r"])
 
-    actor_grad = tape.gradient(actor_loss, policy.model.trainable_variables)
-    actor_optimizer.apply_gradients(zip(actor_grad, policy.model.trainable_variables))
+    # save data to replay buffer; handle `final_observation`
+    real_next_obs = next_obs.copy()
+    for idx, trunc in enumerate(truncations):
+        if trunc:
+            real_next_obs[idx] = infos["final_observation"][idx]
+    rb.add(obs, real_next_obs, actions, rewards, terminations, infos)
 
+    # CRUCIAL step easy to overlook
+    obs = next_obs
 
-#######################################################################################################33
-#######################################################################################################33
-#######################################################################################################33
+    # ALGO LOGIC: training.
+    if global_step > TOTAL_TIMESTEPS // 40:
+        data = rb.sample(BATCH_SIZE)
+        with torch.no_grad():
+            next_state_actions = target_actor(data.next_observations)
+            qf1_next_target = qf1_target(data.next_observations, next_state_actions)
+            next_q_value = data.rewards.flatten() + (
+                1 - data.dones.flatten()
+            ) * GAMMA * (qf1_next_target).view(-1)
 
+        qf1_a_values = qf1(data.observations, data.actions).view(-1)
+        qf1_loss = F.mse_loss(qf1_a_values, next_q_value)
 
-def rendertrial(maxiter=NSTEPS, verbose=True):
-    """
-    Display a roll-out from random start and optimal feedback.
-    Press ^Z to get a roll-out at training time.
-    """
-    x = env.reset()
-    rsum = 0.0
-    for i in range(maxiter):
-        u = policy(x)
-        x, reward = env.step(u)[:2]
-        env.render()
-        rsum += reward
-    if verbose:
-        print("Lasted ", i, " timestep -- total reward:", rsum)
+        # optimize the model
+        q_optimizer.zero_grad()
+        qf1_loss.backward()
+        q_optimizer.step()
 
+        if global_step % TRAIN_FREQUENCY == 0:
+            actor_loss = -qf1(data.observations, actor(data.observations)).mean()
+            actor_optimizer.zero_grad()
+            actor_loss.backward()
+            actor_optimizer.step()
 
-signal.signal(
-    signal.SIGTSTP, lambda x, y: rendertrial()
-)  # Roll-out when CTRL-Z is pressed
-env.full.sleepAtDisplay = 5e-3
+        # update the target network
+        if global_step % TARGET_NETWORK_FREQUENCY == 0:
+            for param, target_param in zip(
+                actor.parameters(), target_actor.parameters()
+            ):
+                target_param.data.copy_(
+                    TAU * param.data + (1 - TAU) * target_param.data
+                )
+            for param, target_param in zip(qf1.parameters(), qf1_target.parameters()):
+                target_param.data.copy_(
+                    TAU * param.data + (1 - TAU) * target_param.data
+                )
 
-# Logs
-h_rewards = []
-h_steps = []
-
-# Takes about 4 min to train
-for episode in range(NEPISODES):
-    prev_state = env.reset()
-
-    for step in range(NSTEPS):
-        # Uncomment this to see the Actor in action
-        # But not in a python notebook.
-        # env.render()
-
-        action = policy(prev_state, noise=ou_noise())
-        state, reward = env.step(action)[:2]
-        done = False
-
-        replayDeque.append(ReplayItem(prev_state, action, reward, done, state))
-
-        prev_state = state
-
-        if len(replayDeque) <= BATCH_SIZE:
-            continue
-
-        ####################################################################
-        # Sample a minibatch
-
-        batch = random.sample(
-            replayDeque, BATCH_SIZE
-        )  # Random batch from replay memory.
-        state_batch = tf.convert_to_tensor([b.x for b in batch])
-        action_batch = tf.convert_to_tensor([b.u for b in batch])
-        reward_batch = tf.convert_to_tensor(
-            [[b.reward] for b in batch], dtype=np.float32
-        )
-        done_batch = tf.convert_to_tensor([b.done for b in batch])
-        next_state_batch = tf.convert_to_tensor([b.x2 for b in batch])
-
-        ####################################################################
-        # One gradient step for the minibatch
-
-        # Critic and actor gradients
-        learn(state_batch, action_batch, reward_batch, next_state_batch)
-        # Step smoothing using target networks
-        policy.targetAssign(policyTarget)
-        quality.targetAssign(qualityTarget)
-
-        if done:
-            break  # stop at episode end.
-
-    # Some prints and logs
-    episodic_reward = sum([replayDeque[-i - 1].reward for i in range(step + 1)])
-    h_rewards.append(episodic_reward)
-    h_steps.append(step + 1)
-
-    print(f"Ep#{episode:3d}: lasted {step+1:d} steps, reward={episodic_reward:3.1f} ")
-
-    # avg_reward = np.mean(h_rewards[-40:])
-    # if episode==5 and RANDOM_SEED==0:
-    #     assert(  abs(avg_reward + 1423.0528188196286) < 1e-3 )
-    # if episode==0 and RANDOM_SEED==0:
-    #     assert(  abs(avg_reward + 1712.386325099637) < 1e-3 )
-
-# Plotting graph
-# Episodes versus Avg. Rewards
-plt.plot(h_rewards)
-plt.xlabel("Episode")
-plt.ylabel("Epsiodic Reward")
-plt.show()
-
-#######################################################################################################33
-#######################################################################################################33
-#######################################################################################################33
+envs.close()
