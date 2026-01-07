@@ -2,7 +2,6 @@
 Simple example of use of display_collision_patches.
 Create a scene with 3 objects, move them and display the collision patches during the
 movement.
-"""
 
 import time
 
@@ -87,3 +86,4 @@ assert (
     len(visual_model.geometryObjects)
     == len(geom_model.geometryObjects) + 2 * COLPATCH_DEFAULT_PREALLOC
 )
+"""
