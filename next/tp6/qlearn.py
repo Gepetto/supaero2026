@@ -17,7 +17,6 @@ from collections import deque
 
 import matplotlib.pyplot as plt
 import numpy as np
-
 from tp6.env_pendulum import EnvPendulumHybrid
 from tp6.qnetwork import QNetwork
 
