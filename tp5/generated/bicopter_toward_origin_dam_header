@@ -36,3 +36,39 @@ class DifferentialActionModelBicopter(crocoddyl.DifferentialActionModelAbstract)
         # Getting the state and control variables
         x1, x2, th, v1, v2, w = x
         fr, fl = u
+
+        # Shortname for system parameters
+        mass, span, g, inertia = self.mass, self.span, self.g, self.inertia
+        s, c = np.sin(th), np.cos(th)
+
+        # Defining the equation of motions
+        # Force (fx,fz,tauy) in local frame
+        loc_f = np.array([0, fr + fl, (fl - fr) * span])
+        # Acceleration (x,z,th) in world frame
+        data.xout = np.array(
+            [-loc_f[1] * s / mass, loc_f[1] * c / mass - g, loc_f[2] / inertia]
+        )
+
+        # Computing the cost residual and value
+        data.r = self.costWeights * np.array(
+            [
+                x1,
+                x2,
+                s,
+                1 - c,
+                v1,
+                v2,
+                w,
+                fr,
+                fl,
+                data.xout[0],
+                data.xout[1],
+                data.xout[2],
+            ]
+        )
+        data.cost = 0.5 * sum(data.r**2)
+
+    def calcDiff(self, data, x, u=None):
+        # Advance user might implement the derivatives. Here
+        # we will rely on finite differences.
+        pass

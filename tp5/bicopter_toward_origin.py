@@ -68,8 +68,6 @@ class DifferentialActionModelBicopter(crocoddyl.DifferentialActionModelAbstract)
         x1, x2, th, v1, v2, w = x
         fr, fl = u
 
-        # %end_jupyter_snippet
-
         # Shortname for system parameters
         mass, span, g, inertia = self.mass, self.span, self.g, self.inertia
         s, c = np.sin(th), np.cos(th)
@@ -101,13 +99,10 @@ class DifferentialActionModelBicopter(crocoddyl.DifferentialActionModelAbstract)
         )
         data.cost = 0.5 * sum(data.r**2)
 
-    # %jupyter_snippet dam_calcdiff_template
     def calcDiff(self, data, x, u=None):
         # Advance user might implement the derivatives. Here
         # we will rely on finite differences.
         pass
-
-
 # %end_jupyter_snippet
 
 # %jupyter_snippet dam
