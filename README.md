@@ -43,7 +43,7 @@ pip install .
 
 After that, you can start the server with `jupyter lab`
 
-### Fallback solution: docker 
+### Fallback solution: docker
 
 If the default setup is not working for you, as a backup solution, a Docker image is provided, and can be started with:
 
