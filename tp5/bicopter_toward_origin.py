@@ -103,6 +103,8 @@ class DifferentialActionModelBicopter(crocoddyl.DifferentialActionModelAbstract)
         # Advance user might implement the derivatives. Here
         # we will rely on finite differences.
         pass
+
+
 # %end_jupyter_snippet
 
 # %jupyter_snippet dam
